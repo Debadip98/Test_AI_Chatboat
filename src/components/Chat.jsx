@@ -1,75 +1,122 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { openrouterChat } from '../lib/openrouter'
+import React, { useState } from 'react';
+import { sendMessage } from '../lib/openrouter';
 
-export default function Chat(){
-  const [messages, setMessages] = useState([{id:1,from:'bot',text:'Hi — ask me about places, upload images, or chat.'}])
-  const [input, setInput] = useState('')
-  const [typing, setTyping] = useState(false)
-  const [file, setFile] = useState(null)
-  const endRef = useRef(null)
+export default function Chat() {
+  const [messages, setMessages] = useState([
+    { role: 'system', content: 'You are a helpful assistant.' }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(()=> endRef.current?.scrollIntoView({behavior:'smooth'}), [messages])
+  const handleSend = async () => {
+    if (!input.trim()) return;
 
-  async function send(e){
-    e?.preventDefault()
-    const t = input.trim()
-    if (!t) return
-    setMessages(m => [...m, {id:Date.now(), from:'user', text:t}])
-    setInput('')
-    setTyping(true)
+    const newMessages = [
+      ...messages,
+      { role: 'user', content: input }
+    ];
+
+    setMessages(newMessages);
+    setInput('');
+    setLoading(true);
+
     try {
-      const reply = await openrouterChat(t)
-      setMessages(m => [...m, {id:Date.now()+1, from:'bot', text: reply || 'No reply'}])
-      speak(reply || 'No reply')
-    } catch(err){
-      setMessages(m => [...m, {id:Date.now()+1, from:'bot', text: 'Error: ' + err.message}])
-    } finally { setTyping(false) }
-  }
+      const data = await sendMessage(newMessages);
+      const reply = data?.choices?.[0]?.message?.content || 'No response';
 
-  function speak(text){
-    if (!('speechSynthesis' in window)) return
-    const u = new SpeechSynthesisUtterance(text)
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(u)
-  }
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: reply }
+      ]);
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Error getting response.' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  function startVoice(){
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return alert('Speech recognition not supported')
-    const r = new SR()
-    r.lang = 'en-US'
-    r.onresult = ev => setInput(ev.results[0][0].transcript)
-    r.start()
-  }
-
-  async function uploadAndSend(){
-    if (!file) return alert('Pick a file first')
-    setMessages(m => [...m, {id:Date.now(), from:'user', text: 'Uploaded file: ' + file.name}])
-    setFile(null)
-  }
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') handleSend();
+  };
 
   return (
-    <div>
-      <div className="chat-area">
-        <div className="chat-window">
-          {messages.map(m=>(
-            <div key={m.id} style={{display:'flex',flexDirection:'column',alignItems: m.from==='user' ? 'flex-end' : 'flex-start'}}>
-              <div className={m.from==='user' ? 'bubble-user' : 'bubble-bot'}>{m.text}</div>
-            </div>
-          ))}
-          {typing && <div className="small">Bot is typing…</div>}
-          <div ref={endRef} />
-        </div>
-
-        <form onSubmit={send} style={{display:'flex',gap:8,alignItems:'center'}}>
-          <button type="button" onClick={startVoice} className="btn">🎤</button>
-          <input type="file" onChange={e=>setFile(e.target.files?.[0] ?? null)} style={{display:'none'}} id="chat-file" />
-          <label htmlFor="chat-file" className="filebtn">📎</label>
-          <input className="input" value={input} onChange={e=>setInput(e.target.value)} placeholder="Say something..." />
-          <button className="btn" type="submit">Send</button>
-          <button type="button" onClick={uploadAndSend} className="btn" style={{background:'#10b981'}}>Upload</button>
-        </form>
+    <div style={styles.container}>
+      <div style={styles.chatBox}>
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            style={{
+              ...styles.message,
+              backgroundColor: msg.role === 'user' ? '#DCF8C6' : '#E5E5EA',
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start'
+            }}
+          >
+            {msg.content}
+          </div>
+        ))}
+        {loading && <div style={styles.loading}>Thinking...</div>}
+      </div>
+      <div style={styles.inputBox}>
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Type a message..."
+          style={styles.input}
+        />
+        <button onClick={handleSend} style={styles.button}>Send</button>
       </div>
     </div>
-  )
+  );
 }
+
+const styles = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    padding: 20,
+    fontFamily: 'Arial, sans-serif'
+  },
+  chatBox: {
+    flex: 1,
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '10px'
+  },
+  message: {
+    padding: '10px',
+    borderRadius: '10px',
+    maxWidth: '60%',
+    wordWrap: 'break-word'
+  },
+  loading: {
+    fontStyle: 'italic',
+    color: '#666'
+  },
+  inputBox: {
+    display: 'flex',
+    gap: '8px'
+  },
+  input: {
+    flex: 1,
+    padding: '10px',
+    borderRadius: '5px',
+    border: '1px solid #ccc'
+  },
+  button: {
+    padding: '10px 20px',
+    borderRadius: '5px',
+    border: 'none',
+    backgroundColor: '#007bff',
+    color: 'white',
+    cursor: 'pointer'
+  }
+};
