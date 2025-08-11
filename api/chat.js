@@ -1,32 +1,32 @@
 // api/chat.js
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const { messages } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: "Messages must be an array" });
   }
 
   try {
-    const { messages } = req.body;
-
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.VITE_OPENROUTER_API_KEY}`,
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-3.5-turbo", // You can change to another model
-        messages: messages,
+        model: "openai/gpt-3.5-turbo",
+        messages,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return res.status(response.status).json({ error: errorText });
-    }
-
-    const data = await response.json();
+    const data = await orRes.json();
     return res.status(200).json(data);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Error calling OpenRouter API" });
   }
 }
